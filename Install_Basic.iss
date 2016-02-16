@@ -3,7 +3,7 @@
 
 #define use_sql2005express
 #define use_sql2008express
-#define MyAppName "Jiffy Local Client"
+#define MyAppName "Jiffy LC"
 #define MyAppVersion "1.5"
 #define MyAppPublisher "Option Three Consulting Pvt Ltd, Inc."
 #define MyAppURL "http://www.option3consulting.com/"
@@ -23,10 +23,11 @@ AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 DefaultDirName={pf}\{#MyAppName}
 DisableProgramGroupPage=yes
-OutputDir=C:\Users\O3\Desktop\helloworld\output
+OutputDir=C:\Users\O3\Desktop\JiffyLC\output
 OutputBaseFilename=setup
 Compression=lzma
 SolidCompression=yes
+PrivilegesRequired=admin
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -35,15 +36,19 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "localclient-0.3.jar"; DestDir: "{app}"; Flags: ignoreversion
+Source: "localclient-0.5.jar"; DestDir: "{app}"; Flags: ignoreversion
 Source: "launch.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "launch.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "IEDriverServer.exe"; DestDir: "C:\Python27"; Flags: ignoreversion; Check: CopyInitialRepos
+Source: "yajsw-beta-12.04\*"; DestDir: "{tmp}\yajsw-beta-12.04"; Flags: recursesubdirs
+Source: "dummy.txt"; DestDir: "{tmp}"; AfterInstall:  InstallService
 Source: "Automator\*"; DestDir: "C:\Program Files (x86)\IronPython 2.7\Automator"; Flags: ignoreversion; Check: CopyInitialRepos
 Source: "AutomatorScriptEngine\*"; DestDir: "C:\Program Files (x86)\IronPython 2.7\AutomatorScriptEngine"; Flags: ignoreversion; Check: CopyInitialRepos
 Source: "python-2.7.11.msi"; DestDir: "{app}"; Flags: dontcopy
 Source: "IronPython-2.7.5.msi"; DestDir: "{app}"; Flags: dontcopy
-Source: "InstallService.bat"; DestDir: "{app}"; Flags: dontcopy
+Source: "InstallSelenium.bat"; DestDir: "{app}"; Flags: dontcopy
+Source: "InstallLCService.bat"; DestDir: "{app}"; Flags: dontcopy
+
+
 
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
@@ -51,18 +56,55 @@ Source: "InstallService.bat"; DestDir: "{app}"; Flags: dontcopy
 Name: "{commonprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
-[Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+[Dirs]
+Name: "{tmp}\data"
 
 [Setup]
 DisableReadyPage=yes
 
-
-
 [Code]
-procedure MyBeforeInstall();
+
+function GetUninstallString: string;
+var
+  sUnInstPath: string;
+  sUnInstallString: String;
 begin
-  MsgBox('About to install MyProg.exe as ' + CurrentFileName + '.', mbInformation, MB_OK);
+  Result := '';
+  sUnInstPath := ExpandConstant('Software\Microsoft\Windows\CurrentVersion\Uninstall\{{400C4C10-F33E-4DB3-9381-DCA368C8D315}is1'); //Your App GUID/ID
+  sUnInstallString := '';
+  if not RegQueryStringValue(HKLM, sUnInstPath, 'UninstallString', sUnInstallString) then
+    RegQueryStringValue(HKCU, sUnInstPath, 'UninstallString', sUnInstallString);
+  Result := sUnInstallString;
+end;
+
+function IsUpgrade: Boolean;
+begin
+  Result := (GetUninstallString() <> '');
+end;
+
+function InitializeSetup: Boolean;
+var
+  V: Integer;
+  iResultCode: Integer;
+  sUnInstallString: string;
+  sResultCode: Integer;
+begin
+  Result := True; // in case when no previous version is found
+  if RegValueExists(HKEY_LOCAL_MACHINE,'Software\Microsoft\Windows\CurrentVersion\Uninstall\{400C4C10-F33E-4DB3-9381-DCA368C8D315}_is1', 'UninstallString') then  //Your App GUID/ID
+  begin
+    V := MsgBox(ExpandConstant('An older Version of app was detected. Do you want to Upgrade it?'), mbInformation, MB_YESNO); //Custom Message if App installed
+    if V = IDYES then
+    begin
+
+      sUnInstallString := GetUninstallString();
+      sUnInstallString :=  RemoveQuotes(sUnInstallString);
+      Exec(ExpandConstant(sUnInstallString), '', '', SW_SHOW, ewWaitUntilTerminated, iResultCode);
+      Result := True; //if you want to proceed after uninstall
+                //Exit; //if you want to quit after uninstall
+    end
+    else
+      Result := False; //when older version present and not uninstalled
+  end;
 end;
 
 
@@ -290,8 +332,8 @@ begin
     Result1 := MsgBox('This Component requires Selenium to run. Do you want to install it now?' ,mbConfirmation, MB_YESNO) = idYes;
     if Result1 then
     begin
-      ExtractTemporaryFile('InstallService.bat');
-      Exec(ExpandConstant('{tmp}\InstallService.bat'), '', '', SW_SHOW, ewWaitUntilTerminated, ResultCode);
+      ExtractTemporaryFile('InstallSelenium.bat');
+      Exec(ExpandConstant('{tmp}\InstallSelenium.bat'), '', '', SW_SHOW, ewWaitUntilTerminated, ResultCode);
     end
     else
     begin
@@ -368,6 +410,13 @@ begin
   end;
 end;
 
+procedure InstallService();
+var
+  sResultCode: Integer;
+  begin
+     ExtractTemporaryFile('InstallLCService.bat');
+     Exec(ExpandConstant('{tmp}\InstallLCService.bat'), '', '', SW_SHOW, ewWaitUntilTerminated, sResultCode);
+  end;
 
 
 
@@ -405,7 +454,6 @@ begin
       CheckandInstallPython();
       CheckandInstallJava();
       CheckanInstallSelenium();
-      CopyDlls();
     end; 
     if ActionPage.Values[2] then
       CheckJava();
@@ -421,4 +469,12 @@ begin
    end;
 end;
 
+function CheckedTasks : Boolean;
+begin
+    if ActionPage.Values[1] or ActionPage.Values[2] or ActionPage.Values[0] then begin
+      Result := True;
+    end else begin
+      Result := False;
+   end;
+end;
 
